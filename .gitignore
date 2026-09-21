@@ -1,0 +1,21 @@
+# Dependencies & Build Outputs
+node_modules
+dist
+.vercel
+
+# Environment & Cache
+.env
+.env.local
+.DS_Store
+*.log
+
+# Large Installer Files & PDFs in working directory
+*.exe
+*.msi
+*.zip
+*.pdf
+*.docx
+OIP.*
+flutter_windows_3.35.1-stable/
+my frist
+my frist.html
