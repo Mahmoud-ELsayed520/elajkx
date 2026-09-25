@@ -3621,7 +3621,39 @@
         font-size: 0.68rem;
       }
     }
+
+    /* ─────────────────────────────────────────────────────────────
+       SUPABASE DATABASE LOADING & SKELETON SHIMMER SYSTEM
+       ────────────────────────────────────────────────────────────── */
+    @keyframes skeletonShimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton-card {
+      background: linear-gradient(90deg, #FFFFFF 25%, #F1F5F9 50%, #FFFFFF 75%);
+      background-size: 200% 100%;
+      animation: skeletonShimmer 1.6s ease-in-out infinite;
+      min-height: 280px;
+      border-radius: 1.5rem;
+      border: 1px solid rgba(226, 232, 240, 0.85);
+      padding: 1.8rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .skeleton-bar {
+      border-radius: var(--radius-full);
+      background: rgba(226, 232, 240, 0.8);
+    }
   </style>
+  <!-- Supabase Import Map for Standalone / Static Server Environments -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+    }
+  }
+  </script>
 </head>
 <body>
   <!-- Engineering Dot/Grid Matrix Texture Overlay -->
@@ -4328,7 +4360,11 @@
     /* ─────────────────────────────────────────────────────────────
        1. VERIFIED EGYPTIAN DRUGS & ANONYMIZED PHARMACY REVENUE MODEL
     ────────────────────────────────────────────────────────────── */
-    const DRUG_CATALOG = [
+    let isDatabaseLoading = false;
+    let databaseError = null;
+    let hasLoadedFromDatabase = false;
+
+    let DRUG_CATALOG = [
       /* ═══════════════════════════════════════════════════════════════
          1. أدوية الضغط والقلب (Cardiovascular / Pressure)
       ═══════════════════════════════════════════════════════════════ */
@@ -5458,10 +5494,86 @@
       renderResultsView();
     }
 
+
+    /* ─────────────────────────────────────────────────────────────
+       SUPABASE DATABASE LOADER & REAL-TIME STATE ENGINE
+    ────────────────────────────────────────────────────────────── */
+    async function loadDatabaseMedicines(forceRetry = false) {
+      if (typeof window.fetchMedicinesWithStock !== 'function') return;
+
+      isDatabaseLoading = true;
+      databaseError = null;
+      renderResultsView();
+
+      try {
+        const { data, error } = await window.fetchMedicinesWithStock();
+        if (error) {
+          if (error.message !== 'SUPABASE_NOT_CONFIGURED') {
+            databaseError = error;
+            console.error('[Elajk] Supabase query error:', error);
+          } else {
+            console.info('[Elajk] Operating with initial seeded dataset. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to connect live Supabase.');
+          }
+        } else if (data && data.length > 0) {
+          DRUG_CATALOG = data;
+          hasLoadedFromDatabase = true;
+          console.info(`[Elajk] Successfully loaded ${data.length} medicines and stock records live from Supabase.`);
+        }
+      } catch (err) {
+        console.error('[Elajk] Unexpected load error:', err);
+        databaseError = err;
+      } finally {
+        isDatabaseLoading = false;
+        renderResultsView();
+      }
+    }
+    window.loadDatabaseMedicines = loadDatabaseMedicines;
+
     function renderResultsView() {
       const container = document.getElementById('pharmacyResultsContainer');
       const heading = document.getElementById('resultsHeading');
       const subheading = document.getElementById('resultsSubheading');
+
+      if (isDatabaseLoading) {
+        heading.textContent = 'تحميل قاعدة بيانات الصيدليات والأدوية...';
+        subheading.textContent = 'جاري الاتصال والتحميل المباشر من قاعدة بيانات Supabase PostgreSQL...';
+        if (container) {
+          container.innerHTML = Array(4).fill(0).map(() => `
+            <div class="skeleton-card">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="skeleton-bar" style="height: 24px; width: 100px; background: rgba(13, 148, 136, 0.18);"></div>
+                <div class="skeleton-bar" style="height: 24px; width: 75px;"></div>
+              </div>
+              <div style="margin: 1.4rem 0;">
+                <div class="skeleton-bar" style="height: 22px; width: 80%; margin-bottom: 0.6rem;"></div>
+                <div class="skeleton-bar" style="height: 16px; width: 60%;"></div>
+              </div>
+              <div class="skeleton-bar" style="height: 42px; width: 100%; border-radius: 14px;"></div>
+            </div>
+          `).join('');
+        }
+        return;
+      }
+
+      if (databaseError) {
+        heading.textContent = 'حالة الاتصال بقاعدة البيانات';
+        subheading.textContent = 'تعذر الاتصال المباشر بـ Supabase';
+        if (container) {
+          container.innerHTML = `
+            <div class="empty-search-emergency-card" style="border-color: rgba(244, 63, 94, 0.3); background: rgba(255, 241, 242, 0.55);">
+              <div class="emergency-icon-glow" style="background: rgba(244, 63, 94, 0.15); border-color: rgba(244, 63, 94, 0.3);">⚠️</div>
+              <h3>تعذر الاتصال بقاعدة بيانات Supabase</h3>
+              <p>حدث خطأ أثناء تحميل بيانات الأدوية من السيرفر (${escapeHtml(databaseError.message || 'شبكة غير متصلة')}). تم تفعيل النسخة الاحتياطية تلقائياً لضمان استمرار خدمتك، أو يمكنك إعادة المحاولة الآن.</p>
+              <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 1.2rem;">
+                <button class="btn-emergency-alert" style="background: var(--teal-dark);" onclick="loadDatabaseMedicines(true)">
+                  <span>إعادة المحاولة الآن ↺</span>
+                </button>
+              </div>
+            </div>
+          `;
+        }
+        return;
+      }
 
       let filtered = [...DRUG_CATALOG];
 
@@ -6260,6 +6372,7 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       loadStateFromStorage();
+      loadDatabaseMedicines();
       navigateToScreen(store.currentScreen || 'home');
       updateCartBadgeDisplays();
       updateWaitlistCounterDisplay();
@@ -6294,5 +6407,13 @@
     </div>
   </div>
 
+  <!-- ════════════ SUPABASE SERVICE MODULE BRIDGE ════════════ -->
+  <script type="module">
+    import { fetchMedicinesWithStock } from './lib/medicinesService.js';
+    window.fetchMedicinesWithStock = fetchMedicinesWithStock;
+    if (typeof window.loadDatabaseMedicines === 'function') {
+      window.loadDatabaseMedicines();
+    }
+  </script>
 </body>
 </html>
